@@ -5,11 +5,12 @@ import (
 	"log"
 	"time"
 
-	"go.etcd.io/etcd/clientv3"
+	v3 "github.com/coreos/etcd/clientv3"
+	v3c "github.com/coreos/etcd/clientv3/concurrency"
 )
 
 func main() {
-	cli, err := clientv3.New(clientv3.Config{
+	cli, err := v3.New(v3.Config{
 		Endpoints:   []string{"localhost:2379"},
 		DialTimeout: 5 * time.Second,
 	})
@@ -17,18 +18,23 @@ func main() {
 		log.Fatal(err.Error())
 	}
 	defer cli.Close()
-	_, err = cli.KV.Put(context.Background(), "x", "13", clientv3.WithKeysOnly())
+
+	s, err := v3c.NewSession(cli)
 	if err != nil {
 		log.Fatal(err.Error())
-
 	}
-	log.Println("ok")
+	log.Println("elec")
+	e := v3c.NewElection(s, "e")
+	ctx := context.Background()
+	ctx, canc := context.WithTimeout(ctx, time.Second*3)
 
-	res, err := cli.KV.Get(context.Background(), "x")
-	if err != nil {
-		log.Fatalf("could not get value for key, %s, %s", "x", err.Error())
+	if err := e.Campaign(ctx, "e"); err != nil {
+		log.Fatal(err.Error())
 	}
 
-	log.Println(res.Kvs)
+	if err := e.Resign(ctx); err != nil {
+		log.Fatal(err.Error())
+	}
 
+	defer canc()
 }
